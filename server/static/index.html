@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini Remote</title>
+<style>
+  :root { --bg:#eef1ee; --ink:#18211c; --mute:#5d6b62; --line:#c9d2cb; --card:#fafbfa; --accent:#0f6b4f; --bad:#a3322a; --ok:#1f8a5b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121815; --ink:#e6ece8; --mute:#93a39a; --line:#2c3832; --card:#1a221e; --accent:#4cc79b; --bad:#ff8a80; --ok:#4cc79b; } }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:1150px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font:600 22px/1.2 Georgia, serif; margin:0; }
+  h2 { font:600 16px/1.3 Georgia, serif; margin:22px 0 8px; }
+  header { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  header .sp { flex:1; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:14px; }
+  label { display:block; font-size:13px; color:var(--mute); margin-bottom:4px; }
+  input, select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:4px; background:var(--bg); color:var(--ink); font:inherit; }
+  input[type=checkbox] { width:auto; }
+  input:focus, select:focus, button:focus-visible, canvas:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button { padding:8px 14px; border:0; border-radius:4px; background:var(--accent); color:#fff; font:600 14px "Segoe UI", system-ui, sans-serif; cursor:pointer; }
+  @media (prefers-color-scheme: dark) { button { color:#06231a; } }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button.danger { background:transparent; color:var(--bad); border:1px solid var(--bad); }
+  button.on { outline:2px solid var(--accent); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .row { display:flex; gap:12px; align-items:end; flex-wrap:wrap; }
+  .row > div { flex:1 1 150px; }
+  .msg { margin:10px 0; color:var(--mute); min-height:1.4em; }
+  .msg.err { color:var(--bad); }
+  .hide { display:none; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--line); margin-right:6px; }
+  .dot.on { background:var(--ok); }
+  .av { width:24px; height:24px; border-radius:50%; vertical-align:middle; margin-right:6px; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--mute); font-weight:600; }
+  .scroll { overflow-x:auto; }
+  .key { font:13px Consolas, monospace; word-break:break-all; padding:10px; border:1px dashed var(--accent); border-radius:4px; margin:8px 0; }
+  .small { font-size:12.5px; color:var(--mute); }
+  .st-completed { color:var(--ok); font-weight:600; } .st-denied, .st-failed, .st-device_removed { color:var(--bad); font-weight:600; } .st-expired { color:var(--mute); font-weight:600; }
+  #veil { display:none; padding:28px; text-align:center; color:var(--mute); border:1px dashed var(--line); border-radius:4px; margin-bottom:8px; }
+  canvas { width:100%; height:auto; background:#000; border-radius:4px; cursor:crosshair; display:block; }
+  #transfer { font-size:14px; color:var(--mute); margin-top:8px; min-height:1.4em; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Mini Remote</h1><span class="sp"></span>
+    <nav id="nav" class="row hide">
+      <button class="ghost" id="tDevices">Devices</button>
+      <button class="ghost" id="tHistory">History</button>
+      <button class="ghost hide" id="tAdmin">Admin</button>
+      <span id="who" class="small"></span>
+      <button class="ghost" id="logout">Sign out</button>
+    </nav>
+  </header>
+  <p id="msg" class="msg" role="status"></p>
+
+  <section id="login" class="card hide">
+    <div style="display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+      <div id="gbtn"></div>
+      <p id="gnote" class="small" style="margin:0"></p>
+      <a href="#" id="devlink" class="small">Dev login</a>
+      <div id="devform" class="row hide" style="width:100%">
+        <div><label for="em">Email</label><input id="em" type="email" autocomplete="username"></div>
+        <div><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password"></div>
+        <button id="go">Sign in</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="devices" class="hide"><h2>Devices</h2>
+    <div class="card" style="margin-bottom:12px">
+      <div class="row">
+        <div><label for="claimCode">Connect to a friend's PC with its ID (9 digits)</label><input id="claimCode" inputmode="numeric" maxlength="12" placeholder="123 456 789"></div>
+        <button id="claimBtn">Add by ID</button>
+        <button class="ghost" id="addPcBtn">Add my PC</button>
+      </div>
+      <div id="addResult" class="hide"></div>
+    </div>
+    <div id="devlist" class="grid"></div></section>
+
+  <section id="history" class="hide"></section>
+
+  <section id="session" class="card hide">
+    <div class="row" style="margin-bottom:10px">
+      <div style="flex:3 1 300px"><label id="sessName"></label><span class="small">Click a file or folder to select it, then ask the owner for it. Double-click opens folders only.</span></div>
+      <button id="home" class="ghost">Open This PC</button>
+      <button id="req">Request selected item</button>
+      <button id="end" class="ghost">Disconnect</button>
+    </div>
+    <div id="veil">Waiting for a File Explorer window on the host…</div>
+    <canvas id="screen" tabindex="0" width="1280" height="720"></canvas>
+    <div id="transfer"></div>
+  </section>
+
+  <section id="admin" class="hide">
+    <div class="row" style="margin-top:6px">
+      <button class="ghost" data-sub="users">Users</button>
+      <button class="ghost" data-sub="adev">Devices</button>
+      <button class="ghost" data-sub="audit">Audit log</button><span class="sp"></span>
+    </div>
+    <div id="keybox" class="hide card" style="margin-top:12px"></div>
+    <div id="sub-users" class="hide"></div>
+    <div id="sub-adev" class="hide"></div>
+    <div id="sub-audit" class="hide"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const say = (t, err) => { $("msg").textContent = t || ""; $("msg").className = "msg" + (err ? " err" : ""); };
+const fmtTs = t => t ? esc(t.replace("T", " ").slice(0, 16)) + " UTC" : "never";
+const fmtSize = n => { n = +n || 0; for (const u of ["B","KB","MB","GB"]) { if (n < 1024 || u === "GB") return (u === "B" ? n : n.toFixed(1)) + " " + u; n /= 1024; } };
+let curOwner = "the owner", devInfo = {};
+let me = null, ws = null, live = false, viewOnly = false, incoming = null, lastMove = 0, overview = null, gReady = false;
+
+async function api(path, method = "GET", body) {
+  const r = await fetch(path, { method, headers: body ? { "Content-Type":"application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { if (r.status === 401 && me) { me = null; show("login"); } throw new Error(data.detail || "Request failed"); }
+  return data;
+}
+function show(view) {
+  for (const v of ["login","devices","history","session","admin"]) $(v).classList.toggle("hide", v !== view);
+  $("nav").classList.toggle("hide", !me || view === "login");
+  $("tAdmin").classList.toggle("hide", !(me && me.role === "admin"));
+  $("tDevices").classList.toggle("on", view === "devices"); $("tHistory").classList.toggle("on", view === "history"); $("tAdmin").classList.toggle("on", view === "admin");
+  $("who").innerHTML = me ? `${me.picture ? `<img class="av" referrerpolicy="no-referrer" src="${esc(me.picture)}" alt="">` : ""}${esc(me.name || me.email)} (${me.role})` : "";
+  if (view === "login") initGoogle();
+}
+
+/* ---------- sign in: Google first, password only as a hidden dev fallback ---------- */
+async function initGoogle() {
+  if (gReady) return;
+  try {
+    const cfg = await api("/api/config");
+    if (!cfg.google_client_id) { $("gnote").textContent = "Google sign-in is not set up on this server (GOOGLE_CLIENT_ID is missing). Use Dev login."; return; }
+    await new Promise((ok, bad) => { const s = document.createElement("script"); s.src = "https://accounts.google.com/gsi/client"; s.onload = ok;
+      s.onerror = () => bad(new Error("Could not load Google sign-in. Check your internet connection.")); document.head.appendChild(s); });
+    google.accounts.id.initialize({ client_id: cfg.google_client_id, callback: onGoogle });
+    google.accounts.id.renderButton($("gbtn"), { theme:"outline", size:"large", text:"signin_with", width:260 });
+    gReady = true;
+  } catch (e) { $("gnote").textContent = e.message; }
+}
+async function onGoogle(resp) {
+  try { me = await api("/api/auth/google", "POST", { credential: resp.credential }); say(""); loadDevices(); }
+  catch (e) { say(e.message, true); }
+}
+$("devlink").onclick = e => { e.preventDefault(); $("devform").classList.toggle("hide"); };
+$("go").onclick = async () => {
+  try { me = await api("/api/login", "POST", { email:$("em").value, password:$("pw").value }); $("pw").value = ""; say(""); loadDevices(); }
+  catch (e) { say(e.message, true); }
+};
+$("pw").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+$("logout").onclick = async () => { if (ws) ws.close(); try { await api("/api/logout", "POST"); } catch {} me = null; show("login"); say("Signed out."); };
+$("tDevices").onclick = () => loadDevices();
+$("tHistory").onclick = () => { show("history"); say(""); renderHistory(); };
+$("tAdmin").onclick = () => { show("admin"); say(""); adminSub("users"); };
+
+/* ---------- devices ---------- */
+async function loadDevices() {
+  show("devices");
+  try {
+    const list = await api("/api/devices");
+    devInfo = Object.fromEntries(list.map(d => [d.id, d]));
+    $("devlist").innerHTML = list.length ? list.map(d => `<div class="card"><div><span class="dot ${d.online ? "on" : ""}"></span><b>${esc(d.name)}</b></div>
+      <div class="small" style="margin:4px 0 10px">${d.busy ? "In a session" : d.online ? "Online" : "Offline"}<br>
+      Owner: ${d.owner_email ? esc(d.owner_name) + " (" + esc(d.owner_email) + ")" : "none (admin managed)"}<br>
+      Last seen: ${d.online ? "now" : fmtTs(d.last_seen)}<br>Registered: ${fmtTs(d.created_at)}${d.code ? `<br>Your ID: <b>${esc(fmtCode(d.code))}</b> <a href="#" onclick="copyText('${esc(d.code)}');return false">Copy</a>` : ""}</div>
+      <div class="row" style="gap:8px"><button ${d.online && !d.busy ? "" : "disabled"} onclick="connectTo(${d.id}, '${esc(d.name).replace(/'/g, "")}')">Connect</button>
+      ${d.can_remove ? `<button class="danger" onclick="removeDevice(${d.id}, '${esc(d.name).replace(/'/g, "")}', 'devices')">Remove device</button>` : ""}</div></div>`).join("")
+      : `<p class="small">No devices yet. Add your own PC, or type a friend's ID in the box above.</p>`;
+  } catch (e) { say(e.message, true); }
+}
+async function removeDevice(id, name, from) {
+  if (!confirm(`Remove "${name}"?\n\nIts device key stops working, a live session is cut off, and the PC must be registered again to come back. This cannot be undone.`)) return;
+  try { await api(`/api/devices/${id}`, "DELETE"); say(`Removed "${name}".`); from === "admin" ? adminSub("adev") : loadDevices(); }
+  catch (e) { say(e.message, true); from === "admin" ? adminSub("adev") : loadDevices(); }
+}
+
+/* ---------- add my PC / connect with ID ---------- */
+const fmtCode = c => String(c).replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3");
+function copyText(t) { navigator.clipboard.writeText(t).then(() => say("Copied."), () => say("Could not copy. Select it and press Ctrl+C.", true)); }
+$("claimBtn").onclick = async () => {
+  const code = $("claimCode").value.replace(/\D/g, "");
+  if (code.length !== 9) return say("The ID has 9 digits.", true);
+  try { const r = await api("/api/devices/claim", "POST", { code }); $("claimCode").value = ""; say("Added " + r.name + ". Press Connect; the owner must allow it."); loadDevices(); }
+  catch (e) { say(e.message, true); }
+};
+$("addPcBtn").onclick = async () => {
+  const name = prompt("Name for this PC (for example: Sivesh laptop)", (me.name || "My") + " PC");
+  if (name === null) return;
+  try { const r = await api("/api/devices", "POST", { name }); showMyKey(r); loadDevices(); }
+  catch (e) { say(e.message, true); }
+};
+function showMyKey(r) {
+  const b = $("addResult"); b.classList.remove("hide");
+  b.innerHTML = `<div style="margin-top:10px"><b>${esc(r.name)}</b> added. <span class="small">The key is shown once. Run the agent on that PC and paste it when asked.</span>
+    <div class="key">${esc(r.device_key)}</div>
+    <div class="small">Your ID: <b>${esc(fmtCode(r.code))}</b> (give it to people who may connect)</div>
+    <div class="small">On that PC, from the agent folder: <code>python agent.py ${esc(location.origin)}</code></div>
+    <div class="row" style="margin-top:8px;gap:8px"><button class="ghost" onclick="copyText('${esc(r.device_key)}')">Copy key</button>
+    <button class="ghost" onclick="copyText('${esc(r.code)}')">Copy ID</button>
+    <button class="ghost" onclick="$('addResult').classList.add('hide')">Done</button></div></div>`;
+}
+
+/* ---------- history ---------- */
+const STATUSES = ["requested","accepted","denied","expired","completed","failed","device_removed"];
+const histQS = () => new URLSearchParams({ user:$("hU").value, status:$("hS").value, date_from:$("hF").value, date_to:$("hT").value }).toString();
+function renderHistory() {
+  $("history").innerHTML = `<h2>Transfer history ${me.role === "admin" ? "(everyone)" : "(yours)"}</h2><div class="card"><div class="row">
+    <div><label>Person (name or email)</label><input id="hU"></div>
+    <div><label>Status</label><select id="hS"><option value="">All</option>${STATUSES.map(s => `<option>${s}</option>`).join("")}</select></div>
+    <div><label>From</label><input id="hF" type="date"></div><div><label>To</label><input id="hT" type="date"></div>
+    <button id="hGo">Search</button><button class="ghost" id="hCsv">Export CSV</button></div></div>
+    <div class="card scroll" style="margin-top:10px"><table id="hTbl"></table></div>`;
+  $("hGo").onclick = loadHistory; $("hCsv").onclick = () => location.href = "/api/history.csv?" + histQS();
+  loadHistory();
+}
+async function loadHistory() {
+  try { const rows = await api("/api/history?limit=300&" + histQS());
+    $("hTbl").innerHTML = `<tr><th>Time (UTC)</th><th>Requester</th><th>Owner</th><th>Device</th><th>File</th><th>Size</th><th>Status</th><th>Completed</th></tr>` +
+      (rows.map(r => `<tr><td>${esc(r.ts.replace("T"," ").slice(0,19))}</td><td>${esc(r.requester_name)}<div class="small">${esc(r.requester_email)}</div></td>
+      <td>${esc(r.owner_name)}<div class="small">${esc(r.owner_email)}</div></td><td>${esc(r.device_name)}</td>
+      <td>${esc(r.file_name)}<div class="small">${esc(r.file_path)}</div></td><td>${r.file_size ? fmtSize(r.file_size) : ""}</td>
+      <td class="st-${esc(r.status)}">${esc(r.status)}</td><td>${r.completed_ts ? esc(r.completed_ts.replace("T"," ").slice(0,19)) : ""}</td></tr>`).join("") || `<tr><td colspan="8" class="small">Nothing here yet.</td></tr>`); }
+  catch (e) { say(e.message, true); }
+}
+
+/* ---------- remote session ---------- */
+function connectTo(id, name) {
+  curOwner = (devInfo[id] && devInfo[id].owner_name) || "the owner";
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws/viewer`); ws.binaryType = "arraybuffer"; live = false; incoming = null;
+  $("sessName").textContent = curOwner === "the owner" ? name : name + " (owner: " + curOwner + ")"; $("transfer").textContent = "";
+  ws.onopen = () => send({ type:"connect", device_id:id });
+  ws.onclose = () => { const was = live; live = false; if (me) { loadDevices(); if (was) say("Session ended."); } };
+  ws.onmessage = onMsg;
+  say("Connecting…");
+}
+async function onMsg(ev) {
+  if (typeof ev.data !== "string") {
+    const kind = new Uint8Array(ev.data)[0], body = ev.data.slice(1);
+    if (kind === 1) { $("veil").style.display = "none"; const bmp = await createImageBitmap(new Blob([body], {type:"image/jpeg"}));
+      const c = $("screen"); if (c.width !== bmp.width || c.height !== bmp.height) { c.width = bmp.width; c.height = bmp.height; }
+      c.getContext("2d").drawImage(bmp, 0, 0); }
+    else if (kind === 2 && incoming) { incoming.parts.push(body); incoming.got += body.byteLength;
+      $("transfer").textContent = `Receiving ${incoming.name}: ${Math.round(100*incoming.got/Math.max(incoming.size,1))}%`; }
+    return;
+  }
+  const m = JSON.parse(ev.data);
+  if (m.type === "restricted") $("veil").style.display = "block";
+  else if (m.type === "waiting") say("Waiting for " + curOwner + " to accept…");
+  else if (m.type === "error") { say(m.message, true); }
+  else if (m.type === "connect_response") {
+    if (!m.accepted) { say(m.expired ? "The owner did not answer in time." : "The owner denied the connection.", true); ws.close(); return; }
+    live = true; viewOnly = !!m.view_only; show("session");
+    say(viewOnly ? "Connected in watch-only mode." : "Connected. Browse folders; files can only be requested."); $("screen").focus();
+  } else if (m.type === "file_offer") incoming = { name:m.name, size:m.size, got:0, parts:[] };
+  else if (m.type === "file_denied") $("transfer").textContent = `Not sent: ${m.reason}`;
+  else if (m.type === "file_done" && incoming) {
+    const blob = new Blob(incoming.parts); let note = "";
+    if (crypto.subtle) { const h = [...new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()))].map(x => x.toString(16).padStart(2,"0")).join("");
+      note = h === m.sha256 ? " (checksum verified)" : " (CHECKSUM MISMATCH)"; }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = incoming.name; a.click();
+    $("transfer").textContent = `Received ${incoming.name}${note}`; incoming = null;
+  }
+}
+const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+const pos = e => { const r = $("screen").getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height }; };
+$("end").onclick = () => ws && ws.close();
+$("req").onclick = () => { $("transfer").textContent = "Waiting for the owner to decide (they have 5 minutes)…"; send({ type:"file_request" }); };
+$("home").onclick = () => send({ type:"open_explorer" });
+const cv = $("screen");
+cv.addEventListener("mousemove", e => { if (viewOnly || Date.now()-lastMove < 40) return; lastMove = Date.now(); send({ type:"mouse", action:"move", ...pos(e) }); });
+cv.addEventListener("click", e => { cv.focus(); if (!viewOnly && e.detail === 1) send({ type:"mouse", action:"click", ...pos(e) }); });
+cv.addEventListener("dblclick", e => { if (!viewOnly) send({ type:"mouse", action:"dblclick", ...pos(e) }); });
+cv.addEventListener("wheel", e => { e.preventDefault(); if (!viewOnly) send({ type:"mouse", action:"scroll", dy:Math.round(-e.deltaY), ...pos(e) }); }, { passive:false });
+cv.addEventListener("contextmenu", e => e.preventDefault());
+const NAV = {ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Home:"home",End:"end",PageUp:"pageup",PageDown:"pagedown",Backspace:"backspace",Enter:"enter"};
+cv.addEventListener("keydown", e => { const k = NAV[e.code]; if (viewOnly || !k) return; e.preventDefault(); send({ type:"key", key:k }); });
+
+/* ---------- admin ---------- */
+document.querySelectorAll("[data-sub]").forEach(b => b.onclick = () => adminSub(b.dataset.sub));
+async function adminSub(name) {
+  document.querySelectorAll("[data-sub]").forEach(b => b.classList.toggle("on", b.dataset.sub === name));
+  for (const s of ["users","adev","audit"]) $("sub-"+s).classList.toggle("hide", s !== name);
+  try { if (name !== "audit") overview = await api("/api/admin/overview"); if (name === "users") renderUsers(); else if (name === "adev") renderDevices(); else renderAudit(); }
+  catch (e) { say(e.message, true); }
+}
+function renderUsers() {
+  $("sub-users").innerHTML = `<h2>Users</h2><div class="card scroll"><table><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr>
+    ${overview.users.map(u => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${u.role}</td><td>${u.active ? "Active" : "Disabled"}</td>
+    <td>${u.email === me.email ? "" : `<button class="ghost" onclick="toggleUser(${u.id}, ${!u.active})">${u.active ? "Disable" : "Enable"}</button>`}</td></tr>`).join("")}</table></div>
+    <p class="small">Team members appear here after their first Google sign-in. Then give them a device under Devices > Who can connect.</p>
+    <h2>Add a dev-login user (optional)</h2><div class="card row"><div><label>Email</label><input id="nuE" type="email"></div><div><label>Temporary password (8+ chars)</label><input id="nuP" type="text"></div>
+    <div><label>Role</label><select id="nuR"><option value="member">Member</option><option value="admin">Admin</option></select></div><button id="nuGo">Add user</button></div>`;
+  $("nuGo").onclick = async () => { try { await api("/api/admin/users", "POST", { email:$("nuE").value, password:$("nuP").value, role:$("nuR").value }); say("User added."); adminSub("users"); } catch (e) { say(e.message, true); } };
+}
+async function toggleUser(id, active) { try { await api(`/api/admin/users/${id}/active`, "POST", { active }); adminSub("users"); } catch (e) { say(e.message, true); } }
+function renderDevices() {
+  const members = overview.users.filter(u => u.active);
+  $("sub-adev").innerHTML = `<h2>Devices</h2>` + (overview.devices.map(d => `<div class="card" style="margin-bottom:10px">
+    <div><span class="dot ${d.online ? "on" : ""}"></span><b>${esc(d.name)}</b> <span class="small">${d.online ? "online" : "offline"}</span></div>
+    <div class="row" style="margin-top:8px"><div style="flex:0 1 150px"><label>Max file size (MB)</label><input id="mb${d.id}" type="number" min="1" max="2000" value="${d.max_file_mb}"></div>
+      <div style="flex:0 1 150px"><label><input id="fo${d.id}" type="checkbox" ${d.allow_folders ? "checked" : ""}> Allow folders</label></div>
+      <button class="ghost" onclick="savePolicy(${d.id})">Save policy</button><button class="ghost" onclick="rotate(${d.id})">New device key</button>
+      <button class="danger" onclick="removeDevice(${d.id}, '${esc(d.name).replace(/'/g, "")}', 'admin')">Remove device</button></div>
+    <label style="margin-top:10px">Who can connect (admins and the owner always can)</label>
+    <div class="row" style="gap:14px">${members.filter(u => u.role !== "admin").map(u => `<label style="margin:0;color:var(--ink)"><input type="checkbox" class="g${d.id}" value="${u.id}" ${d.user_ids.includes(u.id) ? "checked" : ""}> ${esc(u.name || u.email)} <span class="small">${esc(u.email)}</span></label>`).join("") || '<span class="small">No members yet.</span>'}
+    <button class="ghost" onclick="saveGrants(${d.id})">Save access</button></div></div>`).join("") || '<p class="small">No devices yet.</p>') +
+    `<h2>Add a device</h2><div class="card row"><div><label>Name (e.g. Reception PC)</label><input id="ndN"></div>
+    <div><label>Owner</label><select id="ndO">${members.map(u => `<option value="${u.id}" ${u.email === me.email ? "selected" : ""}>${esc(u.name || u.email)}</option>`).join("")}</select></div><button id="ndGo">Create device</button></div>`;
+  $("ndGo").onclick = async () => { try { const r = await api("/api/admin/devices", "POST", { name:$("ndN").value, owner_id:+$("ndO").value }); showKey(r.name, r.device_key); adminSub("adev"); } catch (e) { say(e.message, true); } };
+}
+function showKey(name, key) {
+  const b = $("keybox"); b.classList.remove("hide");
+  b.innerHTML = `<b>Device key for ${esc(name)}</b> <span class="small">(shown once. Paste it into the agent on that PC)</span><div class="key">${esc(key)}</div><button class="ghost" onclick="navigator.clipboard.writeText('${esc(key)}')">Copy</button> <button class="ghost" onclick="$('keybox').classList.add('hide')">Done</button>`;
+}
+async function savePolicy(id) { try { await api(`/api/admin/devices/${id}/policy`, "PUT", { max_file_mb:+$("mb"+id).value, allow_folders:$("fo"+id).checked }); say("Policy saved and sent to the device."); } catch (e) { say(e.message, true); } }
+async function saveGrants(id) { const ids = [...document.querySelectorAll(".g"+id)].filter(c => c.checked).map(c => +c.value);
+  try { await api(`/api/admin/devices/${id}/grants`, "PUT", { user_ids:ids }); say("Access saved."); } catch (e) { say(e.message, true); } }
+async function rotate(id) { if (!confirm("The old key stops working and the device disconnects. Continue?")) return;
+  try { const r = await api(`/api/admin/devices/${id}/rotate-key`, "POST"); showKey(r.name, r.device_key); } catch (e) { say(e.message, true); } }
+
+const EVENTS = ["login_ok","login_failed","login_blocked","google_login","google_login_failed","logout","connect_requested","connect_accepted","connect_denied","connect_refused","session_ended","file_requested","file_decision","file_sent_start","file_sent_done","file_denied","blocked_action","policy_block","policy_changed","access_changed","user_created","user_disabled","user_enabled","device_created","device_removed","device_key_rotated","agent_online","agent_offline","agent_rejected"];
+function renderAudit() {
+  $("sub-audit").innerHTML = `<h2>Audit log</h2><div class="card"><div class="row"><div><label>User</label><input id="aU"></div><div><label>Device</label><input id="aD"></div>
+    <div><label>Event</label><select id="aE"><option value="">All</option>${EVENTS.map(e => `<option>${e}</option>`).join("")}</select></div>
+    <div><label>From</label><input id="aF" type="date"></div><div><label>To</label><input id="aT" type="date"></div>
+    <button id="aGo">Search</button><button class="ghost" id="aCsv">Export CSV</button><button class="ghost" id="aVer">Verify chain</button></div>
+    <p id="aStat" class="small"></p></div><div class="card scroll" style="margin-top:10px"><table id="aTbl"></table></div>`;
+  $("aGo").onclick = loadAudit; $("aCsv").onclick = () => location.href = "/api/admin/audit.csv?" + auditQS();
+  $("aVer").onclick = async () => { const r = await api("/api/admin/audit/verify"); $("aStat").textContent = r.ok ? `Chain intact: ${r.checked} entries verified.` : `TAMPERING DETECTED at entry #${r.broken_at}.`; $("aStat").style.color = r.ok ? "var(--ok)" : "var(--bad)"; };
+  loadAudit();
+}
+const auditQS = () => new URLSearchParams({ user:$("aU").value, device:$("aD").value, event:$("aE").value, date_from:$("aF").value, date_to:$("aT").value }).toString();
+async function loadAudit() {
+  try { const rows = await api("/api/admin/audit?limit=300&" + auditQS());
+    $("aTbl").innerHTML = `<tr><th>#</th><th>Time (UTC)</th><th>User</th><th>Device</th><th>Event</th><th>Details</th></tr>` +
+      rows.map(r => `<tr><td>${r.id}</td><td>${esc(r.ts.replace("T"," ").slice(0,19))}</td><td>${esc(r.user)}</td><td>${esc(r.device)}</td><td>${esc(r.event)}</td><td class="small">${esc(r.detail === "{}" ? "" : r.detail)}</td></tr>`).join(""); }
+  catch (e) { say(e.message, true); }
+}
+
+/* ---------- start ---------- */
+api("/api/me").then(u => { me = u; loadDevices(); }).catch(() => { show("login"); });
+</script>
+</body>
+</html>
